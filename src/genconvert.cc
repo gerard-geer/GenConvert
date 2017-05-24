@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <argp.h>
 #include <string.h>
+#include "rom.h"
 
 // It's a tiny application. Let's go ahead and make our command line args
 // global.
@@ -20,203 +21,6 @@ char* from    = NULL;
 char* to      = NULL;
 bool  v = false;
 bool  q = false; 
-
-/**
- * This enum enumerates the filetypes we can work with.
- */
-typedef enum filetype_enum
-{
-	BIN,MD,SMD,ERROR
-} ftype;
-
-/**
- * This enum just talks about IO errors.
- */
-typedef enum ioerror_enum
-{
-	NO_ERROR=0, COULD_NOT_OPEN_FILE, SIZE_DISCREPANCY
-} ioerror;
-
-/**
- * This struct represents a rom in terms of size and contents.
- */
-typedef struct rom_struct
-{
-	// The size of the rom.
-	uint32_t size;
-	// The data of the rom.
-	uint8_t *data;
-} Rom;
-
-/**
- * Parses a filetype command line argument into an ftype.
- * Parameters:
- *  arg: The argument to parse.
- * Returns:
- *  The appropriate ftype enum value.
- */
-ftype parseType(char * type)
-{
-	// First up: we need to capitalize the string to do case-insensitive
-	// comparison.
-
-	// Darn it there's no platform-independent way to do case
-	// independent comparison between strings.
-
-	// Copy the string so we don't modify the original.
-	char *t = (char*)malloc(sizeof(char)*strlen(type));
-	t = strcpy(t, type);
-
-	// We need to check to see if there's a dot.
-	if(strrchr(t,'.')) ++t;
-
-	// We need to first get the length of the string.
-	register int len = strlen(t);
-	// Whether or not the character is within range to change.
-	register uint8_t change;
-
-	// Now we need to go and convert all of them.
-	for(int i = 0; i < len; ++i)
-	{
-		// Make sure it's a letter that can be capitalized, e.g. lowecase.
-		change = t[i] > 0x60; // 0x61 = 'a'
-
-		// The change flag is set when the character is within operable
-		// bounds. What needs to be changed based on that flag is the 6th
-		// bit of the character, and to zero. Therefore we need to and it
-		// with a value that keeps all other bits the same, but flattens
-		// bit 5. So we shift over the flag 5 bits, and take the opposite
-		// of it. 
-		t[i] &= ~(change<<5);
-		// Wait did you notice the lack of branching? :)
-	}
-	// Now we need to actually do strcmp.
-	if(!strcmp(t, "BIN")) return BIN;
-	else if(!strcmp(t, "MD")) return MD;
-	else if(!strcmp(t, "SMD")) return SMD;
-	else return ERROR;
-}
-
-/**
- * Returns a string representation of a filetype.
- * Parameters:
- *  type: The ftype to represent.
- * Returns:
- *  A string representation of the filetype.
- */
-const char *repType(ftype type)
-{
-	switch(type) {
-		case BIN:   return ".bin";
-		case MD:    return ".md";
-		case SMD:   return ".smd";
-		case ERROR: return ".???";
-		default:    return ".???";
-	}
-}
-
-/**
- * Gets the filetype from a string.
- * Parameters:
- *  str: The string we need to look at.
- *  dft: The ftype to default to if none is found in the string.
- * Returns:
- *  The filetype.
- */
-ftype getType(char *str, ftype dft)
-{
-	// Get the location of the dot.
-	char *aftDot = strrchr(str, '.');
-	
-	// If that location is null, then there was not type
-	// attached to the filename.
-	if(!aftDot) return dft;
-
-	// If it wasn't null, then the dot was found.
-	return parseType(aftDot+1);
-}
-
-/**
- * Checks the outfile filename.
- * Parameters:
- *  outtype: The type we're converting to.
- * Returns:
- *  True if changes were necessary. False otherwise.
- */
-bool checkFilename(ftype outtype)
-{
-	if(getType(outfile,BIN)!=outtype)
-	{
-		char *n = (char*) calloc(strlen(outfile)+5, sizeof(char));
-		n = strcat(n, repType(outtype));
-		outfile = n;
-		return true;
-	}
-	return false;
-}
-
-
-/**
- * Opens the rom file and loads the data into a rom instance.
- * Parameters:
- *  filename: The filename of the Rom to open.
- * Returns:
- *  A pointer to a new Rom instance, NULL if unsuccessful.
- */
-Rom * loadROM(const char* filename)
-{
-	// Open the file.
-	FILE *f = fopen(filename, "rb");
-
-	// Error, you say?
-	if(!f) return NULL;
-
-	// First let's create the new rom instance.
-	Rom *rom = (Rom*) malloc(sizeof(Rom));
-
-	// Get the file size.
-	fseek(f, 0, SEEK_END);
-	rom->size = ftell(f);
-	fseek(f, 0, SEEK_SET);
-
-	// Allocate the memory to store the rom data.
-	rom->data = (uint8_t*) malloc(sizeof(uint8_t)*rom->size);
-
-	// Let the OS take care of chunking.
-	int32_t read = fread(rom->data, sizeof(uint8_t), rom->size, f);
-
-	// Close the file.
-	fclose(f);
-
-	// Return the rom.
-	return rom;
-}
-
-/**
- * Writes a rom to file.
- * Parameters:
- *  filename: The filename of the file to write the ROM instance to.
- *  rom: The rom to save.
- * Returns:
- *  0 if successful, 1 otherwise.
- */
-ioerror saveROM(const char* filename, Rom* rom)
-{
-	// Try to open the file to write bytes.
-	FILE *f = fopen(filename, "wb");
-
-	// Make sure we got the handle.
-	if(!f) return COULD_NOT_OPEN_FILE;
-
-	// Write the data out.
-	int32_t numWritten = fwrite(rom->data, sizeof(uint8_t), rom->size, f);
-
-	// Close the file.
-	fclose(f);
-
-	// Make sure the number of items written is correct.
-	return (numWritten == rom->size)?NO_ERROR:SIZE_DISCREPANCY;
-}
 
 /**
  * Converts a Rom assumed to be .MD format to .BIN format.
@@ -350,7 +154,6 @@ int main(int argc, char **argv)
 {
 	// First things first: let's set some darn default values.
 	outfile = (char*) malloc(sizeof(char)*9);
-	strcpy(outfile, "out.bin");
 
 	// Now we define the arguments we care about for argp.
 	struct argp_option options[] = {
@@ -376,7 +179,7 @@ int main(int argc, char **argv)
 	ftype f, t;
 	if(!from)
 	{
-		f = getType(infile, MD);
+		f = getTypeFromFilename(infile, MD);
 		if(v) printf("No starting format given. Inferring \"%s\" from \"%s\"\n",
 			  repType(f), infile);
 	}
@@ -386,7 +189,7 @@ int main(int argc, char **argv)
 	}
 	if(!to)
 	{
-		t = getType(outfile, BIN);
+		t = getTypeFromFilename(outfile, BIN);
 		if(v) printf("No target format given. Inferring \"%s\" from \"%s\"\n",
 			  repType(t), outfile);
 	}
@@ -399,6 +202,14 @@ int main(int argc, char **argv)
 	if(f==ERROR&&!q) {printf("Error: Invalid source filetype.\n"); return 2;}
 	if(t==ERROR&&!q) {printf("Error: Invalid target filetype.\n"); return 3;}
 	
+	// Now that we have an output type, we can create the default output
+	// filename. (If necessary).
+	if(strlen(outfile)<1)
+	{
+		strcpy(outfile, "out");
+		strcat(outfile, repType(t));
+	}
+
 	// Now we can load the ROM.
 	Rom *in = loadROM(infile);
 
@@ -423,7 +234,7 @@ int main(int argc, char **argv)
 	}
 
 	// We need to make sure the output filename is going to be accurate.
-	if(checkFilename(t)&&!q)
+	if(checkFilename(&outfile, t)&&!q)
 	{
 		printf("Warning: filename didn't match target format. Modifying...\n");
 	}

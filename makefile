@@ -7,10 +7,11 @@
 CC=g++
 NAME=genconv
 SRCDIR=src/
+INCDIR=include/
 BINDIR=bin/
 all:
 	@echo Compiling * into $(NAME)...
-	$(CC) $(SRCDIR)*.cc -o $(BINDIR)$(NAME)
+	$(CC) $(SRCDIR)*.cc -I$(INCDIR) -o $(BINDIR)$(NAME)
 	@echo Giving you permission to run it.
 	chmod +x $(BINDIR)$(NAME) 
 clean:
