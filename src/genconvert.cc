@@ -12,6 +12,7 @@
 #include <argp.h>
 #include <string.h>
 #include "rom.h"
+#include "conv.h"
 
 // It's a tiny application. Let's go ahead and make our command line args
 // global.
@@ -21,99 +22,6 @@ char* from    = NULL;
 char* to      = NULL;
 bool  v = false;
 bool  q = false; 
-
-/**
- * Converts a Rom assumed to be .MD format to .BIN format.
- * Parameters:
- * 	md: The MD formatted Rom.
- * Returns:
- *  A new Rom in BIN format.
- */
-Rom * mdToBin(Rom *md)
-{
-	// Create a new Rom instance to store the conversion. 
-	Rom * bin = (Rom*) malloc(sizeof(Rom));
-	bin->data = (uint8_t*) malloc(sizeof(uint8_t)*md->size);
-	bin->size = md->size;
-
-	// Get the midpoint of the rom.
-	register uint32_t mid = md->size>>1; // Divide by 2 bitwise.
-	// Go through and place all the first-half bytes at odd positions.
-	for(int i = 1, j = 0; j < mid; i+=2, ++j)
-	{
-		bin->data[i] = md->data[j];
-	}
-	// Go through and place all the second-half bytes at even slots.
-	for(int i = 0, j = mid; j < md->size; i+=2, ++j)
-	{
-		bin->data[i] = md->data[j];
-	}
-	// And just like that we're done.
-	return bin;
-}
-
-/**
- * Converts a Rom assumed to be .BIN to the .MD format.
- * Parameters:
- *  bin: The rom to convert.
- * Returns:
- *  The Rom, converted to MD format.
- */
-Rom * binToMd(Rom *bin)
-{
-	// Create a new Rom instance to store the result of the conversion.
-	Rom * md = (Rom*) malloc(sizeof(Rom));
-	md->data = (uint8_t*) malloc(sizeof(uint8_t)*bin->size);
-	md->size = bin->size;
-
-	// Get the midpoint of the rom.
-	register uint32_t mid = bin->size>>1; // Divide by 2 bitwise.
-
-	// Go through the original rom and divvy it up.
-	for(int i = 1, j = 0; j < mid; i+=2, ++j)
-	{
-		md->data[j] = bin->data[i];
-	}
-	for(int i = 0, j = mid; j < md->size; i+=2, ++j)
-	{
-		md->data[j] = bin->data[i];
-	}
-	// Man, I feel like we could do better with our cache locality.
-	return md;
-}
-
-/**
- * Chooses the right conversion operation based on the input and output types
- * and performs it.
- * Parameters:
- *  rom: The rom to convert.
- *  from: The ftype being converted from.
- *  to: The ftype being converted to.
- * Returns:
- *  A new, freshly converted rom instance, if from != to. Otherwise the
- *  same instance is returned. (who wants to waste memory?)
- */
-Rom * convert(Rom *rom, ftype from, ftype to)
-{
-	if(v) printf("Converting from \"%s\" to \"%s\"...\n",
-		  repType(from), repType(to));
-
-	if(from == SMD || to == SMD)
-	{
-		printf("SMD is not supported yet.\n");
-		return NULL;
-	}
-
-	else if(from == to)
-	{
-		if(v) printf("No conversion necessary.\n");
-		return rom;
-	}
-
-	else if(from == MD && to == BIN ) return mdToBin(rom);
-	else if(from == BIN && to == MD ) return binToMd(rom);
-	else return NULL;
-}
 
 /**
  * The argp parsing callback.
@@ -221,6 +129,10 @@ int main(int argc, char **argv)
 
 	// Make sure it was loaded.
 	if(!in){printf("Error: Unable to open in file \"%s\"\n",infile); return 4;}
+
+	if(v) printf("Converting from \"%s\" to \"%s\"...\n",
+		  repType(f), repType(t));
+	if(f==t && v) printf("No conversion necessary.\n");
 
 	// Go ahead and try to convert.
 	Rom *out = convert(in, f, t);

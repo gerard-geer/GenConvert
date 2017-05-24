@@ -6,7 +6,7 @@
  *****************************************************************************/
 
 #ifndef ROM_H
-#define ROM_Hi
+#define ROM_H
 
 #include <stdio.h>
 #include <stdint.h>
